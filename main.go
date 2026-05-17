@@ -154,8 +154,8 @@ func main() {
 
 	client := application_apiv1.NewApplicationServiceClient(conn)
 
-	text := "今日の布施明 公式動画\n" +
-		target.Title + "\n" +
+	text := "今日の布施明ヽ('∀')ﾉ\n\n" +
+		target.Title + "\n\n" +
 		target.Link.Href
 
 	_, err = client.CreatePost(
