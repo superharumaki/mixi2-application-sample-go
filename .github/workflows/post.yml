@@ -21,11 +21,11 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
-      - name: Run Bot
+            - name: Run Bot
         run: go run .
         env:
-  CLIENT_ID: ${{ secrets.CLIENT_ID }}
-  CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-  API_ADDRESS: ${{ secrets.API_ADDRESS }}
-  STREAM_ADDRESS: ${{ secrets.STREAM_ADDRESS }}
-  TOKEN_URL: ${{ secrets.TOKEN_URL }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          API_ADDRESS: ${{ secrets.API_ADDRESS }}
+          STREAM_ADDRESS: ${{ secrets.STREAM_ADDRESS }}
+          TOKEN_URL: ${{ secrets.TOKEN_URL }}
