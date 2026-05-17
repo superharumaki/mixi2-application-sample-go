@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
-	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/mixigroup/mixi2-application-sample-go/config"
 	"github.com/mixigroup/mixi2-application-sdk-go/auth"
@@ -19,24 +19,38 @@ import (
 )
 
 const stateFile = "state.json"
-const youtubeFeedURL = "https://www.youtube.com/feeds/videos.xml?channel_id=UCtEbxUxhVwEwFuNzTjrpzOg"
-
-type Feed struct {
-	Entries []Entry `xml:"entry"`
-}
-
-type Entry struct {
-	VideoID string `xml:"http://www.youtube.com/xml/schemas/2015 videoId"`
-	Title   string `xml:"title"`
-	Link    Link   `xml:"link"`
-}
-
-type Link struct {
-	Href string `xml:"href,attr"`
-}
+const channelID = "UCtEbxUxhVwEwFuNzTjrpzOg"
 
 type State struct {
 	PostedVideoIDs []string `json:"posted_video_ids"`
+}
+
+type YouTubeVideo struct {
+	ID    string
+	Title string
+	URL   string
+}
+
+type ChannelsResponse struct {
+	Items []struct {
+		ContentDetails struct {
+			RelatedPlaylists struct {
+				Uploads string `json:"uploads"`
+			} `json:"relatedPlaylists"`
+		} `json:"contentDetails"`
+	} `json:"items"`
+}
+
+type PlaylistItemsResponse struct {
+	NextPageToken string `json:"nextPageToken"`
+	Items         []struct {
+		Snippet struct {
+			Title      string `json:"title"`
+			ResourceID struct {
+				VideoID string `json:"videoId"`
+			} `json:"resourceId"`
+		} `json:"snippet"`
+	} `json:"items"`
 }
 
 func loadState() State {
@@ -73,59 +87,113 @@ func alreadyPosted(state State, videoID string) bool {
 	return false
 }
 
-func fetchVideos() ([]Entry, error) {
-	resp, err := http.Get(youtubeFeedURL)
+func getJSON(url string, v any) error {
+	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("YouTube RSS取得失敗: %s", resp.Status)
+		return fmt.Errorf("API取得失敗: %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	return json.NewDecoder(resp.Body).Decode(v)
+}
+
+func getUploadsPlaylistID(apiKey string) (string, error) {
+	url := fmt.Sprintf(
+		"https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=%s&key=%s",
+		channelID,
+		apiKey,
+	)
+
+	var result ChannelsResponse
+	if err := getJSON(url, &result); err != nil {
+		return "", err
+	}
+
+	if len(result.Items) == 0 {
+		return "", fmt.Errorf("チャンネルが見つかりませんでした")
+	}
+
+	return result.Items[0].ContentDetails.RelatedPlaylists.Uploads, nil
+}
+
+func fetchAllVideos(apiKey string) ([]YouTubeVideo, error) {
+	playlistID, err := getUploadsPlaylistID(apiKey)
 	if err != nil {
 		return nil, err
 	}
 
-	var feed Feed
-	if err := xml.Unmarshal(body, &feed); err != nil {
-		return nil, err
+	var videos []YouTubeVideo
+	pageToken := ""
+
+	for {
+		url := fmt.Sprintf(
+			"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=%s&maxResults=50&key=%s&pageToken=%s",
+			playlistID,
+			apiKey,
+			pageToken,
+		)
+
+		var result PlaylistItemsResponse
+		if err := getJSON(url, &result); err != nil {
+			return nil, err
+		}
+
+		for _, item := range result.Items {
+			videoID := item.Snippet.ResourceID.VideoID
+			if videoID == "" {
+				continue
+			}
+
+			videos = append(videos, YouTubeVideo{
+				ID:    videoID,
+				Title: item.Snippet.Title,
+				URL:   "https://youtu.be/" + videoID,
+			})
+		}
+
+		if result.NextPageToken == "" {
+			break
+		}
+
+		pageToken = result.NextPageToken
 	}
 
-	return feed.Entries, nil
+	return videos, nil
 }
 
 func main() {
 	cfg := config.GetConfig()
 
-	videos, err := fetchVideos()
+	apiKey := os.Getenv("YOUTUBE_API_KEY")
+	if apiKey == "" {
+		log.Fatal("YOUTUBE_API_KEY missing value")
+	}
+
+	videos, err := fetchAllVideos(apiKey)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if len(videos) == 0 {
-		log.Fatal("YouTube公式チャンネルの動画が見つかりませんでした")
-	}
-
 	state := loadState()
 
-	var target *Entry
-
-	// RSSは新しい順なので、古いものから順番に投稿する
-	for i := len(videos) - 1; i >= 0; i-- {
-		video := videos[i]
-		if !alreadyPosted(state, video.VideoID) {
-			target = &video
-			break
+	var candidates []YouTubeVideo
+	for _, video := range videos {
+		if !alreadyPosted(state, video.ID) {
+			candidates = append(candidates, video)
 		}
 	}
 
-	if target == nil {
+	if len(candidates) == 0 {
 		log.Println("未投稿の公式動画がありません")
 		return
 	}
+
+	rand.Seed(time.Now().UnixNano())
+	target := candidates[rand.Intn(len(candidates))]
 
 	authenticator, err := auth.NewAuthenticator(
 		cfg.ClientID,
@@ -156,7 +224,7 @@ func main() {
 
 	text := "今日の布施明ヽ('∀')ﾉ\n\n" +
 		target.Title + "\n\n" +
-		target.Link.Href
+		target.URL
 
 	_, err = client.CreatePost(
 		ctx,
@@ -170,6 +238,6 @@ func main() {
 
 	log.Println("投稿成功:", target.Title)
 
-	state.PostedVideoIDs = append(state.PostedVideoIDs, target.VideoID)
+	state.PostedVideoIDs = append(state.PostedVideoIDs, target.ID)
 	saveState(state)
 }
