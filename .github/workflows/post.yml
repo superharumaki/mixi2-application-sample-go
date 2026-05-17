@@ -2,7 +2,7 @@ name: Post Bot
 
 on:
   schedule:
-    - cron: '00 7 * * *'  # 日本時間 16:00（多少遅れて動きます）
+    - cron: '15 7 * * *'  # 日本時間 16:00（多少遅れて動きます）
   workflow_dispatch:      # 手動実行用
 
 jobs:
