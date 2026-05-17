@@ -24,9 +24,8 @@ jobs:
       - name: Run Bot
         run: go run .
         env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-
-          API_ADDRESS: application-api.mixi.social:443
-          STREAM_ADDRESS: application-stream.mixi.social:443
-          TOKEN_URL: https://application-auth.mixi.social/oauth2/token
+  CLIENT_ID: ${{ secrets.CLIENT_ID }}
+  CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+  API_ADDRESS: ${{ secrets.API_ADDRESS }}
+  STREAM_ADDRESS: ${{ secrets.STREAM_ADDRESS }}
+  TOKEN_URL: ${{ secrets.TOKEN_URL }}
