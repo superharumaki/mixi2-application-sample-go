@@ -2,14 +2,16 @@ name: Post Bot
 
 on:
   schedule:
-    - cron: '15 7 * * *'  # 日本時間 16:00（多少遅れて動きます）
-  workflow_dispatch:      # 手動実行用
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   post:
     runs-on: ubuntu-latest
+
     permissions:
-      contents: write     # 👈 重要：GitHubにファイルを保存する権限を与えます
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,7 +19,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Install dependencies
         run: go mod tidy
@@ -27,15 +34,13 @@ jobs:
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+
+          TOKEN_URL: https://application-auth.mixi.social/oauth2/token
           API_ADDRESS: application-api.mixi.social:443
           STREAM_ADDRESS: application-stream.mixi.social:443
-          TOKEN_URL: https://application-auth.mixi.social/oauth2/token
 
-      # 👈 ここから下を追加しました！更新された状態を保存します
-      - name: Commit and Push state.json
+      - name: Commit state.json
         run: |
-          git config --local user.email "github-actions[bot]@://github.com"
-          git config --local user.name "github-actions[bot]"
           git add state.json
-          git diff --cached --quiet || git commit -m "Update bot state [skip ci]"
-          git push origin main
+          git commit -m "update state" || echo "no changes"
+          git push

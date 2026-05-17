@@ -2,12 +2,9 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"log"
-	"math/rand"
 	"os"
-	"time"
 
 	"github.com/mixigroup/mixi2-application-sample-go/config"
 	"github.com/mixigroup/mixi2-application-sdk-go/auth"
@@ -28,7 +25,6 @@ type State struct {
 
 const stateFile = "state.json"
 
-// state読み込み
 func loadState() State {
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
@@ -43,24 +39,35 @@ func loadState() State {
 	return s
 }
 
-// state保存
 func saveState(s State) {
-	data, _ := json.MarshalIndent(s, "", "  ")
-	_ = os.WriteFile(stateFile, data, 0644)
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := os.WriteFile(stateFile, data, 0644); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
-
-	// 設定（環境変数ベースに統一）
-	cfg := config.Config{
-		ClientID:     os.Getenv("CLIENT_ID"),
-		ClientSecret: os.Getenv("CLIENT_SECRET"),
-		APIAddress:   os.Getenv("API_ADDRESS"),
-		StreamAddress: os.Getenv("STREAM_ADDRESS"),
-		TokenURL:     os.Getenv("TOKEN_URL"),
+	songs := []Song{
+		{
+			Title: "シクラメンのかほり",
+			URL:   "https://www.youtube.com/results?search_query=布施明+シクラメンのかほり",
+		},
+		{
+			Title: "君は薔薇より美しい",
+			URL:   "https://www.youtube.com/results?search_query=布施明+君は薔薇より美しい",
+		},
+		{
+			Title: "マイ・ウェイ",
+			URL:   "https://www.youtube.com/results?search_query=布施明+マイウェイ",
+		},
 	}
 
-	// 認証
+	cfg := config.GetConfig()
+
 	authenticator, err := auth.NewAuthenticator(
 		cfg.ClientID,
 		cfg.ClientSecret,
@@ -70,79 +77,53 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// gRPC接続
-	apiConn, err := grpc.Dial(
+	ctx, err := authenticator.AuthorizedContext(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn, err := grpc.NewClient(
 		cfg.APIAddress,
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
+		grpc.WithTransportCredentials(
+			credentials.NewClientTLSFromCert(nil, ""),
+		),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer apiConn.Close()
+	defer conn.Close()
 
-	client := application_apiv1.NewApplicationServiceClient(apiConn)
+	client := application_apiv1.NewApplicationServiceClient(conn)
 
-	// 認証コンテキスト
-	authCtx, err := authenticator.AuthorizedContext(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// 曲リスト
-	songs := []Song{
-		{
-			Title: "ウンポ・ダモーレ・アンケ・ペル・メ",
-			URL:   "https://www.youtube.com/watch?v=dFKAKUeoVT8",
-		},
-		{
-			Title: "ふるき友心の唄",
-			URL:   "https://www.youtube.com/watch?v=i6JEvM2yzCQ",
-		},
-		{
-			Title: "とおる君",
-			URL:   "https://www.youtube.com/watch?v=5EXwW0FcbVo",
-		},
-		{
-			Title: "帰りこぬ愛の唄",
-			URL:   "https://www.youtube.com/watch?v=up04--yqmUY",
-		},
-	}
-
-	// 乱数（将来用）
-	rand.Seed(time.Now().UnixNano())
-
-	// state読み込み
 	state := loadState()
 
-	// 安全チェック
 	if state.Index < 0 || state.Index >= len(songs) {
 		state.Index = 0
 	}
 
-	// 曲選択
 	song := songs[state.Index]
 
-	// インデックス更新
-	state.Index++
-	if state.Index >= len(songs) {
-		state.Index = 0
-	}
+	text := "今日の布施明\n" +
+		song.Title + "\n" +
+		song.URL
 
-	saveState(state)
-
-	// 投稿テキスト
-	text := "今日の布施明🎤\n\n" +
-		song.Title + "\n\n" +
-		song.URL + "\n\n" +
-		"#布施明"
-
-	// 投稿
-	_, err = client.CreatePost(authCtx, &application_apiv1.CreatePostRequest{
-		Text: text,
-	})
+	_, err = client.CreatePost(
+		ctx,
+		&application_apiv1.CreatePostRequest{
+			Text: text,
+		},
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Println("投稿成功:", song.Title)
+
+	state.Index++
+
+	if state.Index >= len(songs) {
+		state.Index = 0
+	}
+
+	saveState(state)
 }
