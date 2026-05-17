@@ -3,7 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/mixigroup/mixi2-application-sample-go/config"
@@ -14,26 +18,36 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-type Song struct {
-	Title string
-	URL   string
+const stateFile = "state.json"
+const youtubeFeedURL = "https://www.youtube.com/feeds/videos.xml?channel_id=UCtEbxUxhVwEwFuNzTjrpzOg"
+
+type Feed struct {
+	Entries []Entry `xml:"entry"`
+}
+
+type Entry struct {
+	VideoID string `xml:"http://www.youtube.com/xml/schemas/2015 videoId"`
+	Title   string `xml:"title"`
+	Link    Link   `xml:"link"`
+}
+
+type Link struct {
+	Href string `xml:"href,attr"`
 }
 
 type State struct {
-	Index int `json:"index"`
+	PostedVideoIDs []string `json:"posted_video_ids"`
 }
-
-const stateFile = "state.json"
 
 func loadState() State {
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
-		return State{Index: 0}
+		return State{}
 	}
 
 	var s State
 	if err := json.Unmarshal(data, &s); err != nil {
-		return State{Index: 0}
+		return State{}
 	}
 
 	return s
@@ -50,23 +64,68 @@ func saveState(s State) {
 	}
 }
 
-func main() {
-	songs := []Song{
-		{
-			Title: "シクラメンのかほり",
-			URL:   "https://www.youtube.com/results?search_query=布施明+シクラメンのかほり",
-		},
-		{
-			Title: "君は薔薇より美しい",
-			URL:   "https://www.youtube.com/results?search_query=布施明+君は薔薇より美しい",
-		},
-		{
-			Title: "マイ・ウェイ",
-			URL:   "https://www.youtube.com/results?search_query=布施明+マイウェイ",
-		},
+func alreadyPosted(state State, videoID string) bool {
+	for _, id := range state.PostedVideoIDs {
+		if id == videoID {
+			return true
+		}
+	}
+	return false
+}
+
+func fetchVideos() ([]Entry, error) {
+	resp, err := http.Get(youtubeFeedURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("YouTube RSS取得失敗: %s", resp.Status)
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var feed Feed
+	if err := xml.Unmarshal(body, &feed); err != nil {
+		return nil, err
+	}
+
+	return feed.Entries, nil
+}
+
+func main() {
 	cfg := config.GetConfig()
+
+	videos, err := fetchVideos()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(videos) == 0 {
+		log.Fatal("YouTube公式チャンネルの動画が見つかりませんでした")
+	}
+
+	state := loadState()
+
+	var target *Entry
+
+	// RSSは新しい順なので、古いものから順番に投稿する
+	for i := len(videos) - 1; i >= 0; i-- {
+		video := videos[i]
+		if !alreadyPosted(state, video.VideoID) {
+			target = &video
+			break
+		}
+	}
+
+	if target == nil {
+		log.Println("未投稿の公式動画がありません")
+		return
+	}
 
 	authenticator, err := auth.NewAuthenticator(
 		cfg.ClientID,
@@ -95,17 +154,9 @@ func main() {
 
 	client := application_apiv1.NewApplicationServiceClient(conn)
 
-	state := loadState()
-
-	if state.Index < 0 || state.Index >= len(songs) {
-		state.Index = 0
-	}
-
-	song := songs[state.Index]
-
-	text := "今日の布施明\n" +
-		song.Title + "\n" +
-		song.URL
+	text := "今日の布施明 公式動画\n" +
+		target.Title + "\n" +
+		target.Link.Href
 
 	_, err = client.CreatePost(
 		ctx,
@@ -117,13 +168,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println("投稿成功:", song.Title)
+	log.Println("投稿成功:", target.Title)
 
-	state.Index++
-
-	if state.Index >= len(songs) {
-		state.Index = 0
-	}
-
+	state.PostedVideoIDs = append(state.PostedVideoIDs, target.VideoID)
 	saveState(state)
 }
