@@ -55,20 +55,20 @@ func main() {
 
 	songs := []Song{
 		{
-			Title: "シクラメンのかほり",
-			URL:   "https://www.youtube.com/results?search_query=布施明+シクラメンのかほり",
+			Title: "ウンポ・ダモーレ・アンケ・ペル・メ",
+			URL:   "https://www.youtube.com/watch?v=dFKAKUeoVT8",
 		},
 		{
-			Title: "君は薔薇より美しい",
-			URL:   "https://www.youtube.com/results?search_query=布施明+君は薔薇より美しい",
+			Title: "ふるき友心の唄",
+			URL:   "https://www.youtube.com/watch?v=i6JEvM2yzCQ",
 		},
 		{
-			Title: "積木の部屋",
-			URL:   "https://www.youtube.com/results?search_query=布施明+積木の部屋",
+			Title: "とおる君",
+			URL:   "https://www.youtube.com/watch?v=5EXwW0FcbVo",
 		},
 		{
-			Title: "MY WAY",
-			URL:   "https://www.youtube.com/results?search_query=布施明+MY+WAY",
+			Title: "帰りこぬ愛の唄",
+			URL:   "https://www.youtube.com/watch?v=up04--yqmUY",
 		},
 	}
 
