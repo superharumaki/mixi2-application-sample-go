@@ -48,7 +48,11 @@ func saveState(s State) {
 
 func main() {
 
-	cfg := config.GetConfig()
+	cfg.ClientID = os.Getenv("CLIENT_ID")
+cfg.ClientSecret = os.Getenv("CLIENT_SECRET")
+cfg.APIAddress = os.Getenv("API_ADDRESS")
+cfg.StreamAddress = os.Getenv("STREAM_ADDRESS")
+cfg.TokenURL = os.Getenv("TOKEN_URL")
 
 	authenticator, err := auth.NewAuthenticator(
 		cfg.ClientID,
