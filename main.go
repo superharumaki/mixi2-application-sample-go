@@ -1,132 +1,129 @@
-package main
-
-import (
-	"context"
-	"crypto/tls"
-	"encoding/json"
-	"log"
-	"math/rand"
-	"os"
-	"time"
-
-	"github.com/mixigroup/mixi2-application-sample-go/config"
-	"github.com/mixigroup/mixi2-application-sdk-go/auth"
-	application_apiv1 "github.com/mixigroup/mixi2-application-sdk-go/gen/go/social/mixi/application/service/application_api/v1"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-)
-
-type Song struct {
-	Title string
-	URL   string
-}
-
-type State struct {
-	Index int `json:"index"`
-}
-
-const stateFile = "state.json"
-
-func loadState() State {
-	data, err := os.ReadFile(stateFile)
-	if err != nil {
-		return State{Index: 0}
-	}
-
-	var s State
-	if err := json.Unmarshal(data, &s); err != nil {
-		return State{Index: 0}
-	}
-	return s
-}
-
-func saveState(s State) {
-	data, _ := json.MarshalIndent(s, "", "  ")
-	_ = os.WriteFile(stateFile, data, 0644)
-}
-
-func main() {
-
-	cfg.ClientID = os.Getenv("CLIENT_ID")
-cfg.ClientSecret = os.Getenv("CLIENT_SECRET")
-cfg.APIAddress = os.Getenv("API_ADDRESS")
-cfg.StreamAddress = os.Getenv("STREAM_ADDRESS")
-cfg.TokenURL = os.Getenv("TOKEN_URL")
-
-	authenticator, err := auth.NewAuthenticator(
-		cfg.ClientID,
-		cfg.ClientSecret,
-		cfg.TokenURL,
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	apiConn, err := grpc.Dial(
-		cfg.APIAddress,
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer apiConn.Close()
-
-	client := application_apiv1.NewApplicationServiceClient(apiConn)
-
-	authCtx, err := authenticator.AuthorizedContext(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	songs := []Song{
-		{
+package main			
+			
+import (			
+	context		
+	crypto/tls		
+	encoding/json		
+	log		
+	math/rand		
+	os		
+	time		
+			
+	github.com/mixigroup/mixi2-application-sample-go/config		
+	github.com/mixigroup/mixi2-application-sdk-go/auth		
+	application_apiv1 "github.com/mixigroup/mixi2-application-sdk-go/gen/go/social/mixi/application/service/application_api/v1"		
+			
+	google.golang.org/grpc		
+	google.golang.org/grpc/credentials		
+)			
+			
+type Song struct {			
+	Title string		
+	URL   string		
+}			
+			
+type State struct {			
+	Index int `json:"index"`		
+}			
+			
+const stateFile = "state.json"			
+			
+func loadState() State {			
+	data, err := os.ReadFile(stateFile)		
+	if err != nil {		
+		return State{Index: 0}	
+	}		
+			
+	var s State		
+	if err := json.Unmarshal(data, &s); err != nil {		
+		return State{Index: 0}	
+	}		
+	return s		
+}			
+			
+func saveState(s State) {			
+	data, _ := json.MarshalIndent(s, "", "  ")		
+	_ = os.WriteFile(stateFile, data, 0644)		
+}			
+			
+func main() {			
+			
+	cfg := config.GetConfig()		
+			
+	authenticator, err := auth.NewAuthenticator(		
+		cfg.ClientID,	
+		cfg.ClientSecret,	
+		cfg.TokenURL,	
+	)		
+	if err != nil {		
+		log.Fatal(err)	
+	}		
+			
+	apiConn, err := grpc.Dial(		
+		cfg.APIAddress,	
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),	
+	)		
+	if err != nil {		
+		log.Fatal(err)	
+	}		
+	defer apiConn.Close()		
+			
+	client := application_apiv1.NewApplicationServiceClient(apiConn)		
+			
+	authCtx, err := authenticator.AuthorizedContext(context.Background())		
+	if err != nil {		
+		log.Fatal(err)	
+	}		
+			
+	songs := []Song{		
+		{	
 			Title: "ウンポ・ダモーレ・アンケ・ペル・メ",
 			URL:   "https://www.youtube.com/watch?v=dFKAKUeoVT8",
-		},
-		{
+		},	
+		{	
 			Title: "ふるき友心の唄",
 			URL:   "https://www.youtube.com/watch?v=i6JEvM2yzCQ",
-		},
-		{
+		},	
+		{	
 			Title: "とおる君",
 			URL:   "https://www.youtube.com/watch?v=5EXwW0FcbVo",
-		},
-		{
+		},	
+		{	
 			Title: "帰りこぬ愛の唄",
 			URL:   "https://www.youtube.com/watch?v=up04--yqmUY",
-		},
-	}
-
-	// 念のため（使ってないけど将来用）
-	rand.Seed(time.Now().UnixNano())
-
-	// 🔁 順番制ロジック
-	state := loadState()
-
-	song := songs[state.Index]
-
-	state.Index++
-	if state.Index >= len(songs) {
-		state.Index = 0
-	}
-
-	saveState(state)
-
-	// 投稿本文
-	text := "今日の布施明🎤\n\n" +
-		song.Title +
-		"\n\n▶ " +
-		song.URL +
-		"\n\n#布施明"
-
-	// 投稿
-	_, err = client.CreatePost(authCtx, &application_apiv1.CreatePostRequest{
-		Text: text,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("投稿成功:", song.Title)
-}
+		},	
+	}		
+			
+	// 念のため（使ってないけど将来用）		
+	rand.Seed(time.Now().UnixNano())		
+			
+	// ?? 順番制ロジック		
+	state := loadState()		
+			
+	song := songs[state.Index]		
+			
+	state.Index++		
+	if state.Index >= len(songs) {		
+		state.Index = 0	
+	}		
+			
+	saveState(state)		
+			
+	// 投稿本文		
+	text := "今日の布施明??\n\n" +		
+		song.Title +	
+		\n\n?  +	
+		song.URL +	
+		\n\n#布施明	
+			
+	// 投稿		
+	_, err = client.CreatePost(authCtx, &application_apiv1.CreatePostRequest{		
+		Text: text,	
+	})		
+	if err != nil {		
+		log.Fatal(err)	
+	}		
+			
+	log.Println("投稿成功:", song.Title)		
+}			
+			
