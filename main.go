@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"log"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/mixigroup/mixi2-application-sample-go/config"
@@ -20,6 +22,30 @@ type Song struct {
 	URL   string
 }
 
+type State struct {
+	Index int `json:"index"`
+}
+
+const stateFile = "state.json"
+
+func loadState() State {
+	data, err := os.ReadFile(stateFile)
+	if err != nil {
+		return State{Index: 0}
+	}
+
+	var s State
+	if err := json.Unmarshal(data, &s); err != nil {
+		return State{Index: 0}
+	}
+	return s
+}
+
+func saveState(s State) {
+	data, _ := json.MarshalIndent(s, "", "  ")
+	_ = os.WriteFile(stateFile, data, 0644)
+}
+
 func main() {
 
 	cfg := config.GetConfig()
@@ -29,26 +55,22 @@ func main() {
 		cfg.ClientSecret,
 		cfg.TokenURL,
 	)
-
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	apiConn, err := grpc.NewClient(
+	apiConn, err := grpc.Dial(
 		cfg.APIAddress,
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
 	)
-
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	defer apiConn.Close()
 
 	client := application_apiv1.NewApplicationServiceClient(apiConn)
 
 	authCtx, err := authenticator.AuthorizedContext(context.Background())
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,20 +94,32 @@ func main() {
 		},
 	}
 
+	// 念のため（使ってないけど将来用）
 	rand.Seed(time.Now().UnixNano())
 
-	song := songs[rand.Intn(len(songs))]
+	// 🔁 順番制ロジック
+	state := loadState()
 
+	song := songs[state.Index]
+
+	state.Index++
+	if state.Index >= len(songs) {
+		state.Index = 0
+	}
+
+	saveState(state)
+
+	// 投稿本文
 	text := "今日の布施明🎤\n\n" +
 		song.Title +
 		"\n\n▶ " +
 		song.URL +
 		"\n\n#布施明"
 
+	// 投稿
 	_, err = client.CreatePost(authCtx, &application_apiv1.CreatePostRequest{
 		Text: text,
 	})
-
 	if err != nil {
 		log.Fatal(err)
 	}
