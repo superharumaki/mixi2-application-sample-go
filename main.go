@@ -4,16 +4,21 @@ resp, err := client.CreatePost(authCtx, &application_apiv1.CreatePostRequest{
     },
 })
 if err != nil {
-    log.Fatal(err)
+    log.Fatal("create error:", err)
 }
 
-fmt.Println("投稿成功")
+if resp == nil || resp.Post == nil {
+    log.Fatal("create response is nil")
+}
+
+postID := resp.Post.PostId
+fmt.Println("投稿成功 PostID:", postID)
 
 _, err = client.DeletePost(authCtx, &application_apiv1.DeletePostRequest{
-    PostId: resp.Post.PostId,
+    PostId: postID,
 })
 if err != nil {
-    log.Fatal(err)
+    log.Fatal("delete error:", err)
 }
 
 fmt.Println("削除成功")
