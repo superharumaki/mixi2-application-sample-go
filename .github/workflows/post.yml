@@ -29,7 +29,7 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           API_ADDRESS: application-api.mixi.social:443
           STREAM_ADDRESS: application-stream.mixi.social:443
-          TOKEN_URL: https://mixi.social
+          TOKEN_URL: https://application-auth.mixi.social/oauth2/token
 
       # 👈 ここから下を追加しました！更新された状態を保存します
       - name: Commit and Push state.json
