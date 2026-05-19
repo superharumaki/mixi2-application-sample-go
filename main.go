@@ -53,6 +53,28 @@ type PlaylistItemsResponse struct {
 	} `json:"items"`
 }
 
+type SearchResponse struct {
+	NextPageToken string `json:"nextPageToken"`
+	Items         []struct {
+		ID struct {
+			VideoID string `json:"videoId"`
+		} `json:"id"`
+		Snippet struct {
+			Title string `json:"title"`
+		} `json:"snippet"`
+	} `json:"items"`
+}
+
+type PlaylistsResponse struct {
+	NextPageToken string `json:"nextPageToken"`
+	Items         []struct {
+		ID      string `json:"id"`
+		Snippet struct {
+			Title string `json:"title"`
+		} `json:"snippet"`
+	} `json:"items"`
+}
+
 func loadState() State {
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
@@ -63,7 +85,6 @@ func loadState() State {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return State{}
 	}
-
 	return s
 }
 
@@ -72,7 +93,6 @@ func saveState(s State) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	if err := os.WriteFile(stateFile, data, 0644); err != nil {
 		log.Fatal(err)
 	}
@@ -101,6 +121,22 @@ func getJSON(url string, v any) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
+func addVideo(videos map[string]YouTubeVideo, videoID, title string) {
+	if videoID == "" || title == "" {
+		return
+	}
+
+	if _, exists := videos[videoID]; exists {
+		return
+	}
+
+	videos[videoID] = YouTubeVideo{
+		ID:    videoID,
+		Title: title,
+		URL:   "https://youtu.be/" + videoID,
+	}
+}
+
 func getUploadsPlaylistID(apiKey string) (string, error) {
 	url := fmt.Sprintf(
 		"https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=%s&key=%s",
@@ -120,13 +156,7 @@ func getUploadsPlaylistID(apiKey string) (string, error) {
 	return result.Items[0].ContentDetails.RelatedPlaylists.Uploads, nil
 }
 
-func fetchAllVideos(apiKey string) ([]YouTubeVideo, error) {
-	playlistID, err := getUploadsPlaylistID(apiKey)
-	if err != nil {
-		return nil, err
-	}
-
-	var videos []YouTubeVideo
+func fetchVideosFromPlaylist(apiKey, playlistID string, videos map[string]YouTubeVideo) error {
 	pageToken := ""
 
 	for {
@@ -139,27 +169,108 @@ func fetchAllVideos(apiKey string) ([]YouTubeVideo, error) {
 
 		var result PlaylistItemsResponse
 		if err := getJSON(url, &result); err != nil {
-			return nil, err
+			return err
 		}
 
 		for _, item := range result.Items {
-			videoID := item.Snippet.ResourceID.VideoID
-			if videoID == "" {
-				continue
-			}
-
-			videos = append(videos, YouTubeVideo{
-				ID:    videoID,
-				Title: item.Snippet.Title,
-				URL:   "https://youtu.be/" + videoID,
-			})
+			addVideo(videos, item.Snippet.ResourceID.VideoID, item.Snippet.Title)
 		}
 
 		if result.NextPageToken == "" {
 			break
 		}
-
 		pageToken = result.NextPageToken
+	}
+
+	return nil
+}
+
+func fetchVideosFromSearch(apiKey string, videos map[string]YouTubeVideo) error {
+	pageToken := ""
+
+	for {
+		url := fmt.Sprintf(
+			"https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&order=date&maxResults=50&key=%s&pageToken=%s",
+			channelID,
+			apiKey,
+			pageToken,
+		)
+
+		var result SearchResponse
+		if err := getJSON(url, &result); err != nil {
+			return err
+		}
+
+		for _, item := range result.Items {
+			addVideo(videos, item.ID.VideoID, item.Snippet.Title)
+		}
+
+		if result.NextPageToken == "" {
+			break
+		}
+		pageToken = result.NextPageToken
+	}
+
+	return nil
+}
+
+func fetchVideosFromAllPlaylists(apiKey string, videos map[string]YouTubeVideo) error {
+	pageToken := ""
+
+	for {
+		url := fmt.Sprintf(
+			"https://www.googleapis.com/youtube/v3/playlists?part=snippet&channelId=%s&maxResults=50&key=%s&pageToken=%s",
+			channelID,
+			apiKey,
+			pageToken,
+		)
+
+		var result PlaylistsResponse
+		if err := getJSON(url, &result); err != nil {
+			return err
+		}
+
+		for _, playlist := range result.Items {
+			if playlist.ID == "" {
+				continue
+			}
+			if err := fetchVideosFromPlaylist(apiKey, playlist.ID, videos); err != nil {
+				log.Println("再生リスト取得スキップ:", playlist.Snippet.Title, err)
+			}
+		}
+
+		if result.NextPageToken == "" {
+			break
+		}
+		pageToken = result.NextPageToken
+	}
+
+	return nil
+}
+
+func fetchAllVideos(apiKey string) ([]YouTubeVideo, error) {
+	videosMap := make(map[string]YouTubeVideo)
+
+	uploadsPlaylistID, err := getUploadsPlaylistID(apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := fetchVideosFromPlaylist(apiKey, uploadsPlaylistID, videosMap); err != nil {
+		return nil, err
+	}
+
+	if err := fetchVideosFromSearch(apiKey, videosMap); err != nil {
+		return nil, err
+	}
+
+	if err := fetchVideosFromAllPlaylists(apiKey, videosMap); err != nil {
+		return nil, err
+	}
+
+	videos := make([]YouTubeVideo, 0, len(videosMap))
+	for _, video := range videosMap {
+		videos = append(videos, video)
 	}
 
 	return videos, nil
@@ -222,9 +333,7 @@ func main() {
 
 	client := application_apiv1.NewApplicationServiceClient(conn)
 
-	text := "今日の布施明ヽ('∀')ﾉ\n\n" +
-		target.Title + "\n\n" +
-		target.URL
+	text := "今日の布施明ヽ('∀')ﾉ\n\n" + target.Title + "\n\n" + target.URL
 
 	_, err = client.CreatePost(
 		ctx,
