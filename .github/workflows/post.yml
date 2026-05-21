@@ -2,7 +2,7 @@ name: Post Bot
 
 on:
   schedule:
-    - cron: '7 21 * * *'
+    - cron: '17 21 * * *'
   workflow_dispatch:
 
 jobs:
