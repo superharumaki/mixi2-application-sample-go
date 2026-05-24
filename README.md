@@ -61,9 +61,9 @@ Actions
 
 ```json
 {
-  "posted_video_ids": [
-    "xxxxxxxx"
-  ]
+  "posted_video_ids": [],
+  "last_source": "",
+  "last_group_id": ""
 }
 ```
 
@@ -186,4 +186,6 @@ go run delete.go
 * YouTube API quota 超過時は投稿失敗します
 * 長時間動画のみ対象
 * 投稿失敗時は state.json を更新しません
+* workflow の同時実行防止あり
+* push競合対策あり
 * GitHub Actions の cron は UTC 基準です
