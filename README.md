@@ -1,92 +1,189 @@
-# mixi2 Application Sample for Go
+# mixi2-application-sample-go
 
-[mixi2 Application SDK for Go](https://github.com/mixigroup/mixi2-application-sdk-go) を使用したサンプルアプリケーションです。
+mixi2 に音楽動画を自動投稿する Bot です。
 
-## 必要条件
+## 機能
 
-- Go 1.24 以上
+* YouTube動画をランダム取得
+* ショート動画を除外
+* 同じ動画を連続投稿しない
+* 投稿済みを `state.json` で管理
+* GitHub Actions で毎日自動投稿
 
-## セットアップ
+---
 
-```bash
-cp .env.example .env
-# .env を編集して環境変数を設定
-source .env
-go mod tidy
+# 自動投稿時間
+
+GitHub Actions の cron で毎日実行しています。
+
+```yaml
+cron: '17 21 * * *'
 ```
 
-## 環境変数
+UTC基準なので、日本時間では17時50分ごろ実行されます。
 
-| 変数名 | 必須 | 説明 |
-|--------|------|------|
-| `CLIENT_ID` | ○ | OAuth2 クライアントID |
-| `CLIENT_SECRET` | ○ | OAuth2 クライアントシークレット |
-| `TOKEN_URL` | ○ | トークンエンドポイント URL |
-| `API_ADDRESS` | ○ | API サーバーアドレス |
-| `STREAM_ADDRESS` | △ | Stream サーバーアドレス ※ gRPC ストリーミングのみ必須 |
-| `SIGNATURE_PUBLIC_KEY` | △ | イベント署名検証用の公開鍵（Base64）※ webhook のみ必須 |
-| `PORT` | | Webhook サーバーポート（デフォルト: `8080`） |
+---
 
-## 実行方法
+# 必要なSecrets
 
-### gRPC ストリーミング
+GitHub：
 
-gRPC ストリーミングでイベントを受信します。
+Settings
+→ Secrets and variables
+→ Actions
+→ New repository secret
 
-```bash
-source .env
-go run cmd/stream/main.go
+必要なもの：
+
+```text
+CLIENT_ID
+CLIENT_SECRET
+YOUTUBE_API_KEY
 ```
 
-### HTTP Webhook
+---
 
-HTTP エンドポイントでイベントを受信します。App Runner や Cloud Run での実行を想定しています。
+# 手動実行
 
-```bash
-source .env
-go run cmd/webhook/main.go
+GitHub：
+
+Actions
+→ Post Bot
+→ Run workflow
+
+---
+
+# 投稿済み管理
+
+`state.json` で投稿済み動画を管理しています。
+
+例：
+
+```json
+{
+  "posted_video_ids": [
+    "xxxxxxxx"
+  ]
+}
 ```
 
-エンドポイント:
-- `POST /events`: イベント受信
-- `GET /healthz`: ヘルスチェック
+---
 
-### Vercel（サーバーレス）
+# 投稿リセット
 
-[Vercel](https://vercel.com) にデプロイしてサーバーレス関数としてイベントを受信します。
+最初から再投稿したい場合：
 
-```bash
-# Vercel CLI のインストール
-npm i -g vercel
+`state.json` の中身を空にします。
 
-# Vercel にログイン・プロジェクトをリンク
-vercel link
-
-# 環境変数を設定
-vercel env add CLIENT_ID
-vercel env add CLIENT_SECRET
-vercel env add TOKEN_URL
-vercel env add API_ADDRESS
-vercel env add SIGNATURE_PUBLIC_KEY
-
-# Vercel へデプロイ
-vercel deploy --prod
+```json
+{
+  "posted_video_ids": []
+}
 ```
 
-## セキュリティ
+その後：
 
-- `CLIENT_SECRET` は環境変数やシークレット管理システムから読み込んでください。ソースコードにハードコードしないでください。
-- イベント署名は Ed25519 で検証されます。
-- タイムスタンプ検証によりリプレイ攻撃を防止します（5分間のウィンドウ）。
+```bash
+git add state.json
+git commit -m "reset posted videos"
+git push
+```
 
-## 関連ドキュメント
+---
 
-- **セキュリティポリシー**: [SECURITY.md](SECURITY.md)
-- **コントリビューション方針**: [CONTRIBUTING.md](CONTRIBUTING.md)
+# 投稿削除方法
 
-本リポジトリは mixi2 チームが管理しています。外部からの Pull Request は受け付けていません。
-バグ報告やフィードバックは Issue でご報告ください。詳しくは [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
+mixi2 の投稿IDが分かっている場合、ターミナルから削除できます。
 
-## ライセンス
+## delete.go を作成
 
-[LICENSE](LICENSE) を参照してください。
+```go
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"log"
+	"os"
+
+	"github.com/mixigroup/mixi2-application-sdk-go/auth"
+	application_apiv1 "github.com/mixigroup/mixi2-application-sdk-go/gen/go/social/mixi/application/service/application_api/v1"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+)
+
+func main() {
+	authenticator, err := auth.NewAuthenticator(
+		os.Getenv("CLIENT_ID"),
+		os.Getenv("CLIENT_SECRET"),
+		os.Getenv("TOKEN_URL"),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	authCtx, err := authenticator.AuthorizedContext(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn, err := grpc.Dial(
+		os.Getenv("API_ADDRESS"),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	client := application_apiv1.NewApplicationServiceClient(conn)
+
+	postID := "ここに投稿ID"
+
+	_, err = client.DeletePost(authCtx, &application_apiv1.DeletePostRequest{
+		PostId: postID,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("削除成功")
+}
+```
+
+---
+
+## 環境変数設定
+
+```bash
+export CLIENT_ID=xxxxxxxx
+export CLIENT_SECRET=xxxxxxxx
+export TOKEN_URL=https://application-auth.mixi.social/oauth2/token
+export API_ADDRESS=application-api.mixi.social:443
+```
+
+---
+
+## 実行
+
+```bash
+go run delete.go
+```
+
+成功すると：
+
+```text
+削除成功
+```
+
+と表示されます。
+
+---
+
+# 注意
+
+* YouTube API quota 超過時は投稿失敗します
+* 長時間動画のみ対象
+* 投稿失敗時は state.json を更新しません
+* GitHub Actions の cron は UTC 基準です
