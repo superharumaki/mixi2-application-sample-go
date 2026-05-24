@@ -102,10 +102,10 @@ func loadState() State {
 func saveState(s State) {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("state.json変換失敗:", err)
 	}
 	if err := os.WriteFile(stateFile, data, 0644); err != nil {
-		log.Fatal(err)
+		log.Fatal("state.json保存失敗:", err)
 	}
 }
 
@@ -382,7 +382,7 @@ func main() {
 
 	buckets, err := fetchAllVideos(apiKey)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("YouTube動画取得失敗:", err)
 	}
 
 	state := loadState()
@@ -406,12 +406,12 @@ func main() {
 		cfg.TokenURL,
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("認証設定作成失敗:", err)
 	}
 
 	ctx, err := authenticator.AuthorizedContext(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("認証失敗:", err)
 	}
 
 	conn, err := grpc.NewClient(
@@ -421,7 +421,7 @@ func main() {
 		),
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("mixi2 API接続失敗:", err)
 	}
 	defer conn.Close()
 
@@ -436,7 +436,7 @@ func main() {
 		},
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("投稿失敗:", err)
 	}
 
 	log.Println("投稿成功:", target.Title, "source:", target.Source, "group:", target.GroupTitle)
