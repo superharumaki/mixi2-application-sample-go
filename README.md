@@ -196,10 +196,10 @@ PREVIEW=1 go run .
 
 # 注意
 
-* YouTube API quota 超過時は投稿失敗します
+* YouTube API の利用上限超過時は投稿失敗します
 * 長すぎるタイトルは自動的に「…」で短縮されます
 * 投稿失敗時は state.json を更新しません
-* workflow の同時実行防止あり
-* * GitHub Actions でビルドチェックを行っています
+* GitHub Actions workflow の同時実行防止あり
+* GitHub Actions でビルドチェックを行っています
 * push競合対策あり
 * GitHub Actions の cron は UTC 基準です
