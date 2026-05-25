@@ -6,6 +6,7 @@ mixi2 に音楽動画を自動投稿する Bot です。
 
 * YouTube動画をランダム取得
 * 同じ動画を連続投稿しない
+* 同じカテゴリ（shorts / live など）の連投を避ける制御があります。
 * 投稿済みを `state.json` で管理
 * GitHub Actions で毎日自動投稿
 
@@ -55,6 +56,7 @@ Actions
 # 投稿済み管理
 
 `state.json` で投稿済み動画を管理しています。
+投稿済み動画や直前のカテゴリ情報を保持します。
 
 例：
 
@@ -196,5 +198,6 @@ PREVIEW=1 go run .
 * 長すぎるタイトルは自動的に「…」で短縮されます
 * 投稿失敗時は state.json を更新しません
 * workflow の同時実行防止あり
+* GitHub Actionsでビルドチェックを行っています。
 * push競合対策あり
 * GitHub Actions の cron は UTC 基準です
