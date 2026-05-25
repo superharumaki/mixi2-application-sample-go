@@ -105,7 +105,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"log"
 	"os"
 
@@ -131,9 +130,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		os.Getenv("API_ADDRESS"),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
+		grpc.WithTransportCredentials(
+			credentials.NewClientTLSFromCert(nil, ""),
+		),
 	)
 	if err != nil {
 		log.Fatal(err)
