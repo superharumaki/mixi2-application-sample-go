@@ -427,7 +427,14 @@ func main() {
 
 	client := application_apiv1.NewApplicationServiceClient(conn)
 
-	text := "今日の布施明ヽ('∀')ﾉ\n\n" + target.Title + "\n\n" + target.URL
+	title := trimTitle(target.Title, target.URL)
+	text := "今日の布施明ヽ('∀')ﾉ\n\n" + title + "\n\n" + target.URL
+
+	if os.Getenv("PREVIEW") == "1" {
+		log.Println("プレビュー:")
+		log.Println(text)
+		return
+	}
 
 	_, err = client.CreatePost(
 		ctx,
@@ -445,4 +452,23 @@ func main() {
 	state.LastSource = target.Source
 	state.LastGroupID = target.GroupID
 	saveState(state)
+}
+
+func trimTitle(title string, url string) string {
+	const maxLen = 147
+
+	prefix := "今日の布施明ヽ('∀')ﾉ\n\n"
+	suffix := "\n\n" + url
+
+	available := maxLen - len([]rune(prefix)) - len([]rune(suffix))
+	if available <= 0 {
+		return title
+	}
+
+	runes := []rune(title)
+	if len(runes) <= available {
+		return title
+	}
+
+	return string(runes[:available-1]) + "…"
 }
