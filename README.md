@@ -200,6 +200,6 @@ PREVIEW=1 go run .
 * 長すぎるタイトルは自動的に「…」で短縮されます
 * 投稿失敗時は state.json を更新しません
 * workflow の同時実行防止あり
-* GitHub Actionsでビルドチェックを行っています。
+* * GitHub Actions でビルドチェックを行っています
 * push競合対策あり
 * GitHub Actions の cron は UTC 基準です
