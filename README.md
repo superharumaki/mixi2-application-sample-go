@@ -74,7 +74,7 @@ Actions
 
 最初から再投稿したい場合：
 
-`state.json` の中身を空にします。
+`state.json` を以下の内容に戻します。
 
 ```json
 {
