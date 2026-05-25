@@ -78,7 +78,9 @@ Actions
 
 ```json
 {
-  "posted_video_ids": []
+  "posted_video_ids": [],
+  "last_source": "",
+  "last_group_id": ""
 }
 ```
 
