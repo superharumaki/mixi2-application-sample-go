@@ -237,30 +237,21 @@ func fetchVideosFromPlaylist(apiKey, playlistID, source, groupTitle string) ([]Y
 }
 
 func fetchVideosFromSearch(apiKey string) ([]YouTubeVideo, error) {
-	pageToken := ""
+	requestURL := fmt.Sprintf(
+		"https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&order=date&maxResults=50&key=%s",
+		url.QueryEscape(channelID),
+		url.QueryEscape(apiKey),
+	)
+
+	var result SearchResponse
+	if err := getJSON(requestURL, &result); err != nil {
+		return nil, err
+	}
+
 	videos := make(map[string]YouTubeVideo)
 
-	for {
-		requestURL := fmt.Sprintf(
-			"https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=%s&type=video&order=date&maxResults=50&key=%s&pageToken=%s",
-			url.QueryEscape(channelID),
-			url.QueryEscape(apiKey),
-			url.QueryEscape(pageToken),
-		)
-
-		var result SearchResponse
-		if err := getJSON(requestURL, &result); err != nil {
-			return nil, err
-		}
-
-		for _, item := range result.Items {
-			addVideo(videos, item.ID.VideoID, item.Snippet.Title, "release-api", "release-api", "API検索")
-		}
-
-		if result.NextPageToken == "" {
-			break
-		}
-		pageToken = result.NextPageToken
+	for _, item := range result.Items {
+		addVideo(videos, item.ID.VideoID, item.Snippet.Title, "release-api", "release-api", "API検索")
 	}
 
 	return mapToSlice(videos), nil
