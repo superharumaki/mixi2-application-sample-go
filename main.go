@@ -521,7 +521,6 @@ func main() {
 		Playlists:     filterCandidates(buckets.Playlists, state),
 	}
 
-	rand.Seed(time.Now().UnixNano())
 
 	target, ok := chooseWeighted(candidates)
 	if !ok {
