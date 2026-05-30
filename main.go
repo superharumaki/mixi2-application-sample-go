@@ -26,6 +26,10 @@ const stateFile = "state.json"
 const channelID = "UCtEbxUxhVwEwFuNzTjrpzOg"
 const releasesPageURL = "https://www.youtube.com/@FUSE_AKIRA_/releases"
 
+var httpClient = &http.Client{
+	Timeout: 20 * time.Second,
+}
+
 type State struct {
 	PostedVideoIDs []string `json:"posted_video_ids"`
 	LastSource     string   `json:"last_source"`
@@ -134,9 +138,7 @@ func alreadyPosted(state State, videoID string) bool {
 }
 
 func getJSON(requestURL string, v any) error {
-	client := &http.Client{Timeout: 20 * time.Second}
-
-	resp, err := client.Get(requestURL)
+	resp, err := httpClient.Get(requestURL)
 	if err != nil {
 		return err
 	}
@@ -265,8 +267,6 @@ func fetchVideosFromSearch(apiKey string) ([]YouTubeVideo, error) {
 }
 
 func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
-	client := &http.Client{Timeout: 20 * time.Second}
-
 	req, err := http.NewRequest("GET", releasesPageURL, nil)
 	if err != nil {
 		return nil, err
@@ -275,7 +275,7 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +520,6 @@ func main() {
 		ReleaseSearch: filterCandidates(buckets.ReleaseSearch, state),
 		Playlists:     filterCandidates(buckets.Playlists, state),
 	}
-
 
 	target, ok := chooseWeighted(candidates)
 	if !ok {
