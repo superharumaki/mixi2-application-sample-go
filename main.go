@@ -583,6 +583,7 @@ func main() {
 }
 
 func trimTitle(title string, videoURL string) string {
+	// mixi2投稿本文の上限に収まるようにするための最大文字数
 	const maxLen = 147
 
 	prefix := "今日の布施明ヽ('∀')ﾉ\n\n"
