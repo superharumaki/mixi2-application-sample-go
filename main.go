@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -474,7 +474,7 @@ func chooseWeighted(candidates VideoBuckets) (YouTubeVideo, bool) {
 		return YouTubeVideo{}, false
 	}
 
-	r := rand.Intn(totalWeight)
+	r := rand.IntN(totalWeight)
 	current := 0
 
 	for _, b := range buckets {
@@ -484,7 +484,7 @@ func chooseWeighted(candidates VideoBuckets) (YouTubeVideo, bool) {
 
 		current += b.Weight
 		if r < current {
-			return b.Videos[rand.Intn(len(b.Videos))], true
+			return b.Videos[rand.IntN(len(b.Videos))], true
 		}
 	}
 
