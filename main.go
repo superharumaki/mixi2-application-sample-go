@@ -128,13 +128,14 @@ func saveState(s State) {
 	}
 }
 
-func alreadyPosted(state State, videoID string) bool {
+func buildPostedMap(state State) map[string]bool {
+	posted := make(map[string]bool, len(state.PostedVideoIDs))
+
 	for _, id := range state.PostedVideoIDs {
-		if id == videoID {
-			return true
-		}
+		posted[id] = true
 	}
-	return false
+
+	return posted
 }
 
 func getJSON(requestURL string, v any) error {
@@ -421,13 +422,13 @@ func sourceFamily(source string) string {
 	}
 }
 
-func filterCandidates(videos []YouTubeVideo, state State) []YouTubeVideo {
+func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool) []YouTubeVideo {
 	var candidates []YouTubeVideo
 
 	lastFamily := sourceFamily(state.LastSource)
 
 	for _, video := range videos {
-		if alreadyPosted(state, video.ID) {
+		if posted[video.ID] {
 			continue
 		}
 
@@ -504,12 +505,13 @@ func main() {
 	}
 
 	state := loadState()
+	posted := buildPostedMap(state)
 
 	candidates := VideoBuckets{
-		Videos:        filterCandidates(buckets.Videos, state),
-		ReleasePage:   filterCandidates(buckets.ReleasePage, state),
-		ReleaseSearch: filterCandidates(buckets.ReleaseSearch, state),
-		Playlists:     filterCandidates(buckets.Playlists, state),
+		Videos:        filterCandidates(buckets.Videos, state, posted),
+		ReleasePage:   filterCandidates(buckets.ReleasePage, state, posted),
+		ReleaseSearch: filterCandidates(buckets.ReleaseSearch, state, posted),
+		Playlists:     filterCandidates(buckets.Playlists, state, posted),
 	}
 
 	target, ok := chooseWeighted(candidates)
