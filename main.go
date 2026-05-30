@@ -26,6 +26,10 @@ const stateFile = "state.json"
 const channelID = "UCtEbxUxhVwEwFuNzTjrpzOg"
 const releasesPageURL = "https://www.youtube.com/@FUSE_AKIRA_/releases"
 
+var releasesPageVideoIDRe = regexp.MustCompile(
+	`(?:watch\?v=|/watch\?v=|"videoId":"|\\\"videoId\\\":\\\")([a-zA-Z0-9_-]{11})`,
+)
+
 var httpClient = &http.Client{
 	Timeout: 20 * time.Second,
 }
@@ -284,10 +288,9 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 
 	body := string(bodyBytes)
 
-	re := regexp.MustCompile(`(?:watch\?v=|/watch\?v=|"videoId":"|\\\"videoId\\\":\\\")([a-zA-Z0-9_-]{11})`)
-	matches := re.FindAllStringSubmatch(body, -1)
+	matches := releasesPageVideoIDRe.FindAllStringSubmatch(body, -1)
 
-	seen := make(map[string]bool)
+	seen := make(map[string]bool) // releasesページ内の重複動画IDを除外する
 	var ids []string
 
 	for _, m := range matches {
@@ -584,7 +587,7 @@ func trimTitle(title string, videoURL string) string {
 
 	available := maxLen - len([]rune(prefix)) - len([]rune(suffix))
 	if available <= 0 {
-		return title
+		return ""
 	}
 
 	runes := []rune(title)
