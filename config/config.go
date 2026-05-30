@@ -13,7 +13,7 @@ type Config struct {
 	TokenURL     string `envconfig:"TOKEN_URL" required:"true"`
 
 	// API endpoints
-	APIAddress    string `envconfig:"API_ADDRESS"`
+	APIAddress    string `envconfig:"API_ADDRESS" required:"true"`
 	StreamAddress string `envconfig:"STREAM_ADDRESS"`
 
 	// Webhook settings

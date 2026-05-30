@@ -23,7 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.24.6'
 
       - name: Download dependencies
         run: go mod download
@@ -39,7 +39,6 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           TOKEN_URL: https://application-auth.mixi.social/oauth2/token
           API_ADDRESS: application-api.mixi.social:443
-          STREAM_ADDRESS: application-stream.mixi.social:443
 
       - name: Commit state
         run: |
