@@ -314,6 +314,11 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 		return nil, fmt.Errorf("releasesページから動画IDを取得できませんでした")
 	}
 
+	// ★追加
+	for i, id := range ids {
+		log.Printf("%2d: %s", i+1, id)
+	}
+
 	videos := make(map[string]YouTubeVideo)
 
 	for i := 0; i < len(ids); i += 50 {
