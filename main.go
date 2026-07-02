@@ -307,6 +307,9 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 		ids = append(ids, id)
 	}
 
+	log.Printf("releases page: video IDs found = %d", len(ids))
+	log.Printf("releases page: unique IDs = %d", len(seen))
+
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("releasesページから動画IDを取得できませんでした")
 	}
@@ -334,6 +337,8 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 			addVideo(videos, item.ID, item.Snippet.Title, "release-page", "release-page", "リリースページ")
 		}
 	}
+
+	log.Printf("releases page: videos returned = %d", len(videos))
 
 	return mapToSlice(videos), nil
 }
