@@ -438,8 +438,6 @@ func sourceFamily(source string) string {
 func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool) []YouTubeVideo {
 	var candidates []YouTubeVideo
 
-	lastFamily := sourceFamily(state.LastSource)
-
 	for _, video := range videos {
 		log.Printf(
 			"check id=%s source=%s posted=%v",
@@ -449,13 +447,6 @@ func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool
 		)
 
 		if posted[video.ID] {
-			continue
-		}
-
-		videoFamily := sourceFamily(video.Source)
-
-		if lastFamily == "release" && videoFamily == "release" {
-			log.Printf("skip(release family): %s", video.ID)
 			continue
 		}
 
