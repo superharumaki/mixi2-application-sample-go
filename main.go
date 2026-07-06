@@ -331,9 +331,6 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 	}
 
 	// ★追加
-	for i, id := range ids {
-		log.Printf("%2d: %s", i+1, id)
-	}
 
 	videos := make(map[string]YouTubeVideo)
 
@@ -455,12 +452,6 @@ func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool
 	var candidates []YouTubeVideo
 
 	for _, video := range videos {
-		log.Printf(
-			"check id=%s source=%s posted=%v",
-			video.ID,
-			video.Source,
-			posted[video.ID],
-		)
 
 		if posted[video.ID] {
 			continue
@@ -473,7 +464,6 @@ func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool
 			continue
 		}
 
-		log.Printf("candidate=%s", video.ID)
 		candidates = append(candidates, video)
 	}
 
