@@ -127,8 +127,24 @@ func saveState(s State) {
 	if err != nil {
 		log.Fatal("state.json変換失敗:", err)
 	}
-	if err := os.WriteFile(stateFile, data, 0644); err != nil {
+
+	backupFile := stateFile + ".bak"
+
+	if _, err := os.Stat(stateFile); err == nil {
+		old, err := os.ReadFile(stateFile)
+		if err == nil {
+			_ = os.WriteFile(backupFile, old, 0644)
+		}
+	}
+
+	tmpFile := stateFile + ".tmp"
+
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
 		log.Fatal("state.json保存失敗:", err)
+	}
+
+	if err := os.Rename(tmpFile, stateFile); err != nil {
+		log.Fatal("state.json更新失敗:", err)
 	}
 }
 
