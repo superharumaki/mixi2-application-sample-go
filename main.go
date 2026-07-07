@@ -224,7 +224,11 @@ func getUploadsPlaylistID(apiKey string) (string, error) {
 		return "", fmt.Errorf("チャンネルが見つかりませんでした")
 	}
 
-	return result.Items[0].ContentDetails.RelatedPlaylists.Uploads, nil
+	uploads := result.Items[0].ContentDetails.RelatedPlaylists.Uploads
+	if uploads == "" {
+		return "", fmt.Errorf("uploadsプレイリストIDが取得できませんでした")
+	}
+	return uploads, nil
 }
 
 func fetchVideosFromPlaylist(apiKey, playlistID, source, groupTitle string) ([]YouTubeVideo, error) {
@@ -323,14 +327,11 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 		ids = append(ids, id)
 	}
 
-	log.Printf("releases page: video IDs found = %d", len(ids))
-	log.Printf("releases page: unique IDs = %d", len(seen))
+	log.Printf("releases page: unique video IDs = %d", len(ids))
 
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("releasesページから動画IDを取得できませんでした")
 	}
-
-	// ★追加
 
 	videos := make(map[string]YouTubeVideo)
 
@@ -437,15 +438,6 @@ func fetchAllVideos(apiKey string) (VideoBuckets, error) {
 		ReleaseSearch: releaseSearch,
 		Playlists:     playlists,
 	}, nil
-}
-
-func sourceFamily(source string) string {
-	switch source {
-	case "release", "release-page", "release-api":
-		return "release"
-	default:
-		return source
-	}
 }
 
 func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool) []YouTubeVideo {
