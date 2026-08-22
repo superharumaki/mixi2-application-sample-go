@@ -30,6 +30,12 @@ var releasesPageVideoIDRe = regexp.MustCompile(
 	`(?:watch\?v=|/watch\?v=|"videoId":"|\\\"videoId\\\":\\\")([a-zA-Z0-9_-]{11})`,
 )
 
+// YouTubeのリリースページ内に出てくる
+// OLAK5uy_... のリリース用プレイリストIDを取得する。
+var releasesPagePlaylistIDRe = regexp.MustCompile(
+	`(?:[?&]list=|["\\]playlistId["\\]:["\\]?)(OLAK5uy_[a-zA-Z0-9_-]+)`,
+)
+
 var httpClient = &http.Client{
 	Timeout: 20 * time.Second,
 }
@@ -50,10 +56,11 @@ type YouTubeVideo struct {
 }
 
 type VideoBuckets struct {
-	Videos        []YouTubeVideo
-	ReleasePage   []YouTubeVideo
-	ReleaseSearch []YouTubeVideo
-	Playlists     []YouTubeVideo
+	Videos           []YouTubeVideo
+	ReleasePage      []YouTubeVideo
+	ReleaseSearch    []YouTubeVideo
+	Playlists        []YouTubeVideo
+	ReleasePlaylists []YouTubeVideo
 }
 
 type ChannelsResponse struct {
@@ -71,6 +78,7 @@ type PlaylistItemsResponse struct {
 	Items         []struct {
 		Snippet struct {
 			Title      string `json:"title"`
+			PlaylistID string `json:"playlistId"`
 			ResourceID struct {
 				VideoID string `json:"videoId"`
 			} `json:"resourceId"`
@@ -119,6 +127,7 @@ func loadState() State {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return State{}
 	}
+
 	return s
 }
 
@@ -174,6 +183,7 @@ func getJSON(requestURL string, v any) error {
 
 func isUnavailableTitle(title string) bool {
 	t := strings.TrimSpace(strings.ToLower(title))
+
 	return t == "" ||
 		t == "private video" ||
 		t == "[private video]" ||
@@ -181,7 +191,14 @@ func isUnavailableTitle(title string) bool {
 		t == "[deleted video]"
 }
 
-func addVideo(videos map[string]YouTubeVideo, videoID, title, source, groupID, groupTitle string) {
+func addVideo(
+	videos map[string]YouTubeVideo,
+	videoID,
+	title,
+	source,
+	groupID,
+	groupTitle string,
+) {
 	if videoID == "" || isUnavailableTitle(title) {
 		return
 	}
@@ -202,9 +219,11 @@ func addVideo(videos map[string]YouTubeVideo, videoID, title, source, groupID, g
 
 func mapToSlice(videos map[string]YouTubeVideo) []YouTubeVideo {
 	result := make([]YouTubeVideo, 0, len(videos))
+
 	for _, video := range videos {
 		result = append(result, video)
 	}
+
 	return result
 }
 
@@ -216,6 +235,7 @@ func getUploadsPlaylistID(apiKey string) (string, error) {
 	)
 
 	var result ChannelsResponse
+
 	if err := getJSON(requestURL, &result); err != nil {
 		return "", err
 	}
@@ -225,13 +245,21 @@ func getUploadsPlaylistID(apiKey string) (string, error) {
 	}
 
 	uploads := result.Items[0].ContentDetails.RelatedPlaylists.Uploads
+
 	if uploads == "" {
 		return "", fmt.Errorf("uploadsプレイリストIDが取得できませんでした")
 	}
+
 	return uploads, nil
 }
 
-func fetchVideosFromPlaylist(apiKey, playlistID, source, groupTitle string) ([]YouTubeVideo, error) {
+func fetchVideosFromPlaylist(
+	apiKey,
+	playlistID,
+	source,
+	groupTitle string,
+) ([]YouTubeVideo, error) {
+
 	pageToken := ""
 	videos := make(map[string]YouTubeVideo)
 
@@ -244,17 +272,26 @@ func fetchVideosFromPlaylist(apiKey, playlistID, source, groupTitle string) ([]Y
 		)
 
 		var result PlaylistItemsResponse
+
 		if err := getJSON(requestURL, &result); err != nil {
 			return nil, err
 		}
 
 		for _, item := range result.Items {
-			addVideo(videos, item.Snippet.ResourceID.VideoID, item.Snippet.Title, source, playlistID, groupTitle)
+			addVideo(
+				videos,
+				item.Snippet.ResourceID.VideoID,
+				item.Snippet.Title,
+				source,
+				playlistID,
+				groupTitle,
+			)
 		}
 
 		if result.NextPageToken == "" {
 			break
 		}
+
 		pageToken = result.NextPageToken
 	}
 
@@ -269,6 +306,7 @@ func fetchVideosFromSearch(apiKey string) ([]YouTubeVideo, error) {
 	)
 
 	var result SearchResponse
+
 	if err := getJSON(requestURL, &result); err != nil {
 		return nil, err
 	}
@@ -276,16 +314,26 @@ func fetchVideosFromSearch(apiKey string) ([]YouTubeVideo, error) {
 	videos := make(map[string]YouTubeVideo)
 
 	for _, item := range result.Items {
-		addVideo(videos, item.ID.VideoID, item.Snippet.Title, "release-api", "release-api", "API検索")
+		addVideo(
+			videos,
+			item.ID.VideoID,
+			item.Snippet.Title,
+			"release-api",
+			"release-api",
+			"API検索",
+		)
 	}
 
 	return mapToSlice(videos), nil
 }
 
-func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
+func fetchVideosFromReleasesPage(
+	apiKey string,
+) ([]YouTubeVideo, []string, error) {
+
 	req, err := http.NewRequest("GET", releasesPageURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req.Header.Set("User-Agent", "Mozilla/5.0")
@@ -293,76 +341,201 @@ func fetchVideosFromReleasesPage(apiKey string) ([]YouTubeVideo, error) {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("releasesページ取得失敗: %s", resp.Status)
+		return nil, nil, fmt.Errorf(
+			"releasesページ取得失敗: %s",
+			resp.Status,
+		)
 	}
 
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 20<<20))
+	bodyBytes, err := io.ReadAll(
+		io.LimitReader(resp.Body, 20<<20),
+	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	body := string(bodyBytes)
 
-	matches := releasesPageVideoIDRe.FindAllStringSubmatch(body, -1)
+	// ------------------------------------------------------------
+	// 1. releasesページから動画IDを取得
+	// ------------------------------------------------------------
 
-	seen := make(map[string]bool) // releasesページ内の重複動画IDを除外する
+	videoMatches := releasesPageVideoIDRe.FindAllStringSubmatch(
+		body,
+		-1,
+	)
+
+	seenVideos := make(map[string]bool)
 	var ids []string
 
-	for _, m := range matches {
+	for _, m := range videoMatches {
 		if len(m) < 2 {
 			continue
 		}
 
 		id := m[1]
-		if seen[id] {
+
+		if seenVideos[id] {
 			continue
 		}
 
-		seen[id] = true
+		seenVideos[id] = true
 		ids = append(ids, id)
 	}
 
-	log.Printf("releases page: unique video IDs = %d", len(ids))
+	log.Printf(
+		"releases page: unique video IDs = %d",
+		len(ids),
+	)
 
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("releasesページから動画IDを取得できませんでした")
+		return nil, nil, fmt.Errorf(
+			"releasesページから動画IDを取得できませんでした",
+		)
 	}
+
+	// ------------------------------------------------------------
+	// 2. releasesページからリリース用プレイリストIDを取得
+	// ------------------------------------------------------------
+
+	playlistMatches := releasesPagePlaylistIDRe.FindAllStringSubmatch(
+		body,
+		-1,
+	)
+
+	seenPlaylists := make(map[string]bool)
+	var releasePlaylistIDs []string
+
+	for _, m := range playlistMatches {
+		if len(m) < 2 {
+			continue
+		}
+
+		playlistID := m[1]
+
+		if seenPlaylists[playlistID] {
+			continue
+		}
+
+		seenPlaylists[playlistID] = true
+		releasePlaylistIDs = append(
+			releasePlaylistIDs,
+			playlistID,
+		)
+	}
+
+	log.Printf(
+		"releases page: release playlist IDs = %d",
+		len(releasePlaylistIDs),
+	)
+
+	// ------------------------------------------------------------
+	// 3. 動画IDからタイトル取得
+	// ------------------------------------------------------------
 
 	videos := make(map[string]YouTubeVideo)
 
 	for i := 0; i < len(ids); i += 50 {
 		end := i + 50
+
 		if end > len(ids) {
 			end = len(ids)
 		}
 
 		requestURL := fmt.Sprintf(
 			"https://www.googleapis.com/youtube/v3/videos?part=snippet&id=%s&key=%s",
-			url.QueryEscape(strings.Join(ids[i:end], ",")),
+			url.QueryEscape(
+				strings.Join(ids[i:end], ","),
+			),
 			url.QueryEscape(apiKey),
 		)
 
 		var result VideosResponse
+
 		if err := getJSON(requestURL, &result); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		for _, item := range result.Items {
-			addVideo(videos, item.ID, item.Snippet.Title, "release-page", "release-page", "リリースページ")
+			addVideo(
+				videos,
+				item.ID,
+				item.Snippet.Title,
+				"release-page",
+				"release-page",
+				"リリースページ",
+			)
 		}
 	}
 
-	log.Printf("releases page: videos returned = %d", len(videos))
+	log.Printf(
+		"releases page: videos returned = %d",
+		len(videos),
+	)
 
-	return mapToSlice(videos), nil
+	return mapToSlice(videos), releasePlaylistIDs, nil
 }
 
-func fetchVideosFromAllPlaylists(apiKey string) ([]YouTubeVideo, error) {
+func fetchVideosFromReleasePlaylists(
+	apiKey string,
+	playlistIDs []string,
+) ([]YouTubeVideo, error) {
+
+	allVideos := make(map[string]YouTubeVideo)
+
+	for _, playlistID := range playlistIDs {
+
+		videos, err := fetchVideosFromPlaylist(
+			apiKey,
+			playlistID,
+			"release-playlist",
+			"リリース",
+		)
+
+		if err != nil {
+			log.Printf(
+				"リリースプレイリスト取得失敗: %s: %v",
+				playlistID,
+				err,
+			)
+			continue
+		}
+
+		log.Printf(
+			"release playlist: id=%s videos=%d",
+			playlistID,
+			len(videos),
+		)
+
+		for _, video := range videos {
+			addVideo(
+				allVideos,
+				video.ID,
+				video.Title,
+				"release-playlist",
+				video.GroupID,
+				video.GroupTitle,
+			)
+		}
+	}
+
+	log.Printf(
+		"release playlists: total unique videos = %d",
+		len(allVideos),
+	)
+
+	return mapToSlice(allVideos), nil
+}
+
+func fetchVideosFromAllPlaylists(
+	apiKey string,
+) ([]YouTubeVideo, error) {
+
 	pageToken := ""
 	allVideos := make(map[string]YouTubeVideo)
 
@@ -375,29 +548,49 @@ func fetchVideosFromAllPlaylists(apiKey string) ([]YouTubeVideo, error) {
 		)
 
 		var result PlaylistsResponse
+
 		if err := getJSON(requestURL, &result); err != nil {
 			return nil, err
 		}
 
 		for _, playlist := range result.Items {
+
 			if playlist.ID == "" {
 				continue
 			}
 
-			videos, err := fetchVideosFromPlaylist(apiKey, playlist.ID, "playlist", playlist.Snippet.Title)
+			videos, err := fetchVideosFromPlaylist(
+				apiKey,
+				playlist.ID,
+				"playlist",
+				playlist.Snippet.Title,
+			)
+
 			if err != nil {
-				log.Println("再生リスト取得スキップ:", playlist.Snippet.Title, err)
+				log.Println(
+					"再生リスト取得スキップ:",
+					playlist.Snippet.Title,
+					err,
+				)
 				continue
 			}
 
 			for _, video := range videos {
-				addVideo(allVideos, video.ID, video.Title, video.Source, video.GroupID, video.GroupTitle)
+				addVideo(
+					allVideos,
+					video.ID,
+					video.Title,
+					video.Source,
+					video.GroupID,
+					video.GroupTitle,
+				)
 			}
 		}
 
 		if result.NextPageToken == "" {
 			break
 		}
+
 		pageToken = result.NextPageToken
 	}
 
@@ -405,25 +598,57 @@ func fetchVideosFromAllPlaylists(apiKey string) ([]YouTubeVideo, error) {
 }
 
 func fetchAllVideos(apiKey string) (VideoBuckets, error) {
+
 	uploadsPlaylistID, err := getUploadsPlaylistID(apiKey)
 	if err != nil {
 		return VideoBuckets{}, err
 	}
 
-	videos, err := fetchVideosFromPlaylist(apiKey, uploadsPlaylistID, "video", "動画")
+	videos, err := fetchVideosFromPlaylist(
+		apiKey,
+		uploadsPlaylistID,
+		"video",
+		"動画",
+	)
 	if err != nil {
 		return VideoBuckets{}, err
 	}
 
-	releasePage, err := fetchVideosFromReleasesPage(apiKey)
+	releasePage, releasePlaylistIDs, err :=
+		fetchVideosFromReleasesPage(apiKey)
+
 	if err != nil {
-		log.Println("releasesページ取得失敗。今回はリリースページ枠を空にします:", err)
+		log.Println(
+			"releasesページ取得失敗。今回はリリースページ枠を空にします:",
+			err,
+		)
+
 		releasePage = []YouTubeVideo{}
+		releasePlaylistIDs = []string{}
+	}
+
+	releasePlaylists, err :=
+		fetchVideosFromReleasePlaylists(
+			apiKey,
+			releasePlaylistIDs,
+		)
+
+	if err != nil {
+		log.Println(
+			"リリースプレイリスト取得失敗。今回は枠を空にします:",
+			err,
+		)
+
+		releasePlaylists = []YouTubeVideo{}
 	}
 
 	releaseSearch, err := fetchVideosFromSearch(apiKey)
 	if err != nil {
-		log.Println("API検索取得失敗。今回はAPI検索枠を空にします:", err)
+		log.Println(
+			"API検索取得失敗。今回はAPI検索枠を空にします:",
+			err,
+		)
+
 		releaseSearch = []YouTubeVideo{}
 	}
 
@@ -433,50 +658,103 @@ func fetchAllVideos(apiKey string) (VideoBuckets, error) {
 	}
 
 	return VideoBuckets{
-		Videos:        videos,
-		ReleasePage:   releasePage,
-		ReleaseSearch: releaseSearch,
-		Playlists:     playlists,
+		Videos:           videos,
+		ReleasePage:      releasePage,
+		ReleaseSearch:    releaseSearch,
+		Playlists:        playlists,
+		ReleasePlaylists: releasePlaylists,
 	}, nil
 }
 
-func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool) []YouTubeVideo {
+func filterCandidates(
+	videos []YouTubeVideo,
+	state State,
+	posted map[string]bool,
+) []YouTubeVideo {
+
 	var candidates []YouTubeVideo
 
 	for _, video := range videos {
 
 		if posted[video.ID] {
-			log.Printf("skip(posted): source=%s id=%s title=%s", video.Source, video.ID, video.Title)
+			log.Printf(
+				"skip(posted): source=%s id=%s title=%s",
+				video.Source,
+				video.ID,
+				video.Title,
+			)
+
 			continue
 		}
 
+		// 通常のplaylistだけ、
+		// 同じプレイリストからの連続投稿を避ける。
+		//
+		// release-playlistには適用しない。
+		//
+		// これにより、1つのリリースに15曲ある場合、
+		// 1曲目を投稿した翌日に2曲目も候補にできる。
 		if state.LastSource == "playlist" &&
 			video.Source == "playlist" &&
 			state.LastGroupID == video.GroupID {
-			log.Printf("skip(same playlist): %s", video.ID)
+
+			log.Printf(
+				"skip(same playlist): %s",
+				video.ID,
+			)
+
 			continue
 		}
 
-		candidates = append(candidates, video)
+		candidates = append(
+			candidates,
+			video,
+		)
 	}
 
 	return candidates
 }
 
-func chooseWeighted(candidates VideoBuckets) (YouTubeVideo, bool) {
+func chooseWeighted(
+	candidates VideoBuckets,
+) (YouTubeVideo, bool) {
+
 	type bucket struct {
+		Name   string
 		Weight int
 		Videos []YouTubeVideo
 	}
 
 	buckets := []bucket{
-		{Weight: 30, Videos: candidates.Videos},
-		{Weight: 45, Videos: candidates.ReleasePage},
-		{Weight: 15, Videos: candidates.ReleaseSearch},
-		{Weight: 10, Videos: candidates.Playlists},
+		{
+			Name:   "videos",
+			Weight: 30,
+			Videos: candidates.Videos,
+		},
+		{
+			Name:   "release-page",
+			Weight: 45,
+			Videos: candidates.ReleasePage,
+		},
+		{
+			Name:   "release-search",
+			Weight: 15,
+			Videos: candidates.ReleaseSearch,
+		},
+		{
+			Name:   "playlists",
+			Weight: 10,
+			Videos: candidates.Playlists,
+		},
+		{
+			Name:   "release-playlist",
+			Weight: 45,
+			Videos: candidates.ReleasePlaylists,
+		},
 	}
 
 	totalWeight := 0
+
 	for _, b := range buckets {
 		if len(b.Videos) > 0 {
 			totalWeight += b.Weight
@@ -491,11 +769,13 @@ func chooseWeighted(candidates VideoBuckets) (YouTubeVideo, bool) {
 	current := 0
 
 	for _, b := range buckets {
+
 		if len(b.Videos) == 0 {
 			continue
 		}
 
 		current += b.Weight
+
 		if r < current {
 			return b.Videos[rand.IntN(len(b.Videos))], true
 		}
@@ -505,84 +785,163 @@ func chooseWeighted(candidates VideoBuckets) (YouTubeVideo, bool) {
 }
 
 func main() {
+
 	cfg := config.GetConfig()
 
 	apiKey := os.Getenv("YOUTUBE_API_KEY")
+
 	if apiKey == "" {
 		log.Fatal("YOUTUBE_API_KEY missing value")
 	}
 
 	buckets, err := fetchAllVideos(apiKey)
 	if err != nil {
-		log.Fatal("YouTube動画取得失敗:", err)
+		log.Fatal(
+			"YouTube動画取得失敗:",
+			err,
+		)
 	}
 
 	log.Printf(
-		"取得件数: videos=%d release-page=%d release-search=%d playlists=%d",
+		"取得件数: videos=%d release-page=%d release-search=%d playlists=%d release-playlists=%d",
 		len(buckets.Videos),
 		len(buckets.ReleasePage),
 		len(buckets.ReleaseSearch),
 		len(buckets.Playlists),
+		len(buckets.ReleasePlaylists),
 	)
 
 	state := loadState()
 	posted := buildPostedMap(state)
 
 	candidates := VideoBuckets{
-		Videos:        filterCandidates(buckets.Videos, state, posted),
-		ReleasePage:   filterCandidates(buckets.ReleasePage, state, posted),
-		ReleaseSearch: filterCandidates(buckets.ReleaseSearch, state, posted),
-		Playlists:     filterCandidates(buckets.Playlists, state, posted),
+		Videos: filterCandidates(
+			buckets.Videos,
+			state,
+			posted,
+		),
+
+		ReleasePage: filterCandidates(
+			buckets.ReleasePage,
+			state,
+			posted,
+		),
+
+		ReleaseSearch: filterCandidates(
+			buckets.ReleaseSearch,
+			state,
+			posted,
+		),
+
+		Playlists: filterCandidates(
+			buckets.Playlists,
+			state,
+			posted,
+		),
+
+		ReleasePlaylists: filterCandidates(
+			buckets.ReleasePlaylists,
+			state,
+			posted,
+		),
 	}
 
 	log.Printf(
-		"候補数: videos=%d release-page=%d release-search=%d playlists=%d",
+		"候補数: videos=%d release-page=%d release-search=%d playlists=%d release-playlists=%d",
 		len(candidates.Videos),
 		len(candidates.ReleasePage),
 		len(candidates.ReleaseSearch),
 		len(candidates.Playlists),
+		len(candidates.ReleasePlaylists),
 	)
 
 	target, ok := chooseWeighted(candidates)
+
 	if !ok {
-		log.Println("未投稿の公式動画がありません")
+		log.Println(
+			"現在取得できている範囲では未投稿の公式動画がありません",
+		)
 		return
 	}
+
+	log.Printf(
+		"投稿候補: source=%s group=%s id=%s title=%s",
+		target.Source,
+		target.GroupTitle,
+		target.ID,
+		target.Title,
+	)
 
 	authenticator, err := auth.NewAuthenticator(
 		cfg.ClientID,
 		cfg.ClientSecret,
 		cfg.TokenURL,
 	)
+
 	if err != nil {
-		log.Fatal("認証設定作成失敗:", err)
+		log.Fatal(
+			"認証設定作成失敗:",
+			err,
+		)
 	}
 
-	ctx, err := authenticator.AuthorizedContext(context.Background())
+	ctx, err := authenticator.AuthorizedContext(
+		context.Background(),
+	)
+
 	if err != nil {
-		log.Fatal("認証失敗:", err)
+		log.Fatal(
+			"認証失敗:",
+			err,
+		)
 	}
 
 	conn, err := grpc.NewClient(
 		cfg.APIAddress,
 		grpc.WithTransportCredentials(
-			credentials.NewClientTLSFromCert(nil, ""),
+			credentials.NewClientTLSFromCert(
+				nil,
+				"",
+			),
 		),
 	)
+
 	if err != nil {
-		log.Fatal("mixi2 API接続失敗:", err)
+		log.Fatal(
+			"mixi2 API接続失敗:",
+			err,
+		)
 	}
+
 	defer conn.Close()
 
-	client := application_apiv1.NewApplicationServiceClient(conn)
+	client :=
+		application_apiv1.NewApplicationServiceClient(
+			conn,
+		)
 
-	title := trimTitle(target.Title, target.URL)
-	text := "今日の布施明ヽ('∀')ﾉ\n\n" + title + "\n\n" + target.URL
+	title := trimTitle(
+		target.Title,
+		target.URL,
+	)
+
+	text :=
+		"今日の布施明ヽ('∀')ﾉ\n\n" +
+			title +
+			"\n\n" +
+			target.URL
 
 	if os.Getenv("PREVIEW") == "1" {
+
 		log.Println("プレビュー:")
 		log.Println(text)
-		log.Println("source:", target.Source, "group:", target.GroupTitle)
+		log.Println(
+			"source:",
+			target.Source,
+			"group:",
+			target.GroupTitle,
+		)
+
 		return
 	}
 
@@ -592,34 +951,65 @@ func main() {
 			Text: text,
 		},
 	)
+
 	if err != nil {
-		log.Fatal("投稿失敗:", err)
+		log.Fatal(
+			"投稿失敗:",
+			err,
+		)
 	}
 
-	log.Println("投稿成功:", target.Title, "source:", target.Source, "group:", target.GroupTitle)
+	log.Println(
+		"投稿成功:",
+		target.Title,
+		"source:",
+		target.Source,
+		"group:",
+		target.GroupTitle,
+	)
 
-	state.PostedVideoIDs = append(state.PostedVideoIDs, target.ID)
+	state.PostedVideoIDs =
+		append(
+			state.PostedVideoIDs,
+			target.ID,
+		)
+
 	state.LastSource = target.Source
 	state.LastGroupID = target.GroupID
+
 	saveState(state)
 }
 
-func trimTitle(title string, videoURL string) string {
+func trimTitle(
+	title string,
+	videoURL string,
+) string {
+
 	// mixi2投稿本文の上限に収まるようにするための最大文字数
 	const maxLen = 147
 
-	prefix := "今日の布施明ヽ('∀')ﾉ\n\n"
-	suffix := "\n\n" + videoURL
+	prefix :=
+		"今日の布施明ヽ('∀')ﾉ\n\n"
 
-	available := maxLen - len([]rune(prefix)) - len([]rune(suffix))
+	suffix :=
+		"\n\n" + videoURL
+
+	available :=
+		maxLen -
+			len([]rune(prefix)) -
+			len([]rune(suffix))
+
 	if available <= 0 {
 		return ""
 	}
 
 	runes := []rune(title)
+
 	if len(runes) <= available {
 		return title
 	}
 
-	return string(runes[:available-1]) + "…"
+	return string(
+		runes[:available-1],
+	) + "…"
 }
