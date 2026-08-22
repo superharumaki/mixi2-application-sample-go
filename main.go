@@ -516,6 +516,14 @@ func main() {
 		log.Fatal("YouTube動画取得失敗:", err)
 	}
 
+	log.Printf(
+		"取得件数: videos=%d release-page=%d release-search=%d playlists=%d",
+		len(videos),
+		len(releasePage),
+		len(releaseSearch),
+		len(playlists),
+	)
+
 	state := loadState()
 	posted := buildPostedMap(state)
 
@@ -525,6 +533,14 @@ func main() {
 		ReleaseSearch: filterCandidates(buckets.ReleaseSearch, state, posted),
 		Playlists:     filterCandidates(buckets.Playlists, state, posted),
 	}
+
+	log.Printf(
+		"候補数: videos=%d release-page=%d release-search=%d playlists=%d",
+		len(candidates.Videos),
+		len(candidates.ReleasePage),
+		len(candidates.ReleaseSearch),
+		len(candidates.Playlists),
+	)
 
 	target, ok := chooseWeighted(candidates)
 	if !ok {
