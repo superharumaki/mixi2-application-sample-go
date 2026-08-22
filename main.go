@@ -520,8 +520,8 @@ func main() {
 		"取得件数: videos=%d release-page=%d release-search=%d playlists=%d",
 		len(buckets.Videos),
 		len(buckets.ReleasePage),
-		len(releaseSearch),
-		len(playlists),
+		len(buckets.ReleaseSearch),
+		len(buckets.Playlists),
 	)
 
 	state := loadState()
