@@ -446,6 +446,7 @@ func filterCandidates(videos []YouTubeVideo, state State, posted map[string]bool
 	for _, video := range videos {
 
 		if posted[video.ID] {
+			log.Printf("skip(posted): source=%s id=%s title=%s", video.Source, video.ID, video.Title)
 			continue
 		}
 
