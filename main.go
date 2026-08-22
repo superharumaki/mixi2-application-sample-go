@@ -518,8 +518,8 @@ func main() {
 
 	log.Printf(
 		"取得件数: videos=%d release-page=%d release-search=%d playlists=%d",
-		len(videos),
-		len(releasePage),
+		len(buckets.Videos),
+		len(buckets.ReleasePage),
 		len(releaseSearch),
 		len(playlists),
 	)
